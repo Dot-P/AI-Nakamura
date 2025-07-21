@@ -1,15 +1,9 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-# Dataset
-Datasets
-
-temp
+datasets
+logs
+__pycache__
+.pytest_cache
+dock.sh
+Dockerfile
+frames/
+dock_config.json
+.mypy_cache
