@@ -3,6 +3,7 @@ import csv
 import random
 import argparse
 from collections import deque, namedtuple
+from itertools import product
 
 import gym
 import numpy as np
@@ -13,9 +14,9 @@ if not hasattr(np, 'bool8'):
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 
 # --- Data structures ---
-
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state', 'done'))
 
 class ReplayBuffer:
@@ -33,7 +34,6 @@ class ReplayBuffer:
         return len(self.buffer)
 
 # --- Neural network ---
-
 class QNetwork(nn.Module):
     def __init__(self, input_dim, hidden_sizes, output_dim):
         super().__init__()
@@ -49,22 +49,17 @@ class QNetwork(nn.Module):
         return self.net(x)
 
 # --- Utility functions ---
-
 def normalize_state(s, low, high):
-    """Linearly scale observation to [-1, 1]."""
     return 2.0 * (s - low) / (high - low) - 1.0
 
 def select_action(state, policy_net, epsilon, n_actions, device):
-    """Epsilon-greedy action selection."""
     if random.random() < epsilon:
         return random.randrange(n_actions)
     st = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
     with torch.no_grad():
-        qv = policy_net(st)
-    return qv.argmax().item()
+        return policy_net(st).argmax().item()
 
 def optimize(buffer, policy_net, target_net, optimizer, batch_size, gamma, device):
-    """Sample from buffer and do a gradient step; return loss and TD errors."""
     if len(buffer) < batch_size:
         return None, None
 
@@ -90,11 +85,9 @@ def optimize(buffer, policy_net, target_net, optimizer, batch_size, gamma, devic
     return loss.item(), td_errors
 
 # --- Experiment loop ---
-
-def run_experiment(params, device):
+def run_experiment(params, device, max_episodes):
     gamma, lr, hidden_sizes, batch_size, memory_size, seed = params
 
-    # Reproducibility
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -112,7 +105,6 @@ def run_experiment(params, device):
     eps_start, eps_end, eps_decay = 1.0, 0.01, 500.0
     steps_done = 0
 
-    # Prepare logging
     os.makedirs('logs', exist_ok=True)
     fname = (
         f"logs/g{gamma}_lr{lr}_h{'-'.join(map(str,hidden_sizes))}"
@@ -120,17 +112,23 @@ def run_experiment(params, device):
     )
     with open(fname, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow([
-            'episode', 'cum_reward', 'steps_to_goal',
-            'epsilon', 'mean_td_error', 'mean_loss'
-        ])
+        writer.writerow(['episode', 'cum_reward', 'steps_to_goal',
+                         'epsilon', 'mean_td_error', 'mean_loss'])
 
         consec_success = deque(maxlen=10)
         episode = 0
 
+        pbar = tqdm(desc=f"Run γ={gamma}, lr={lr}, h={hidden_sizes}, b={batch_size}, m={memory_size}, s={seed}",
+                    unit="ep", leave=False)
         while True:
             episode += 1
-            # Handle new Gym reset API
+            if episode > max_episodes:
+                print(f"[Max episodes reached] γ={gamma}, lr={lr}, hidden={hidden_sizes}, "
+                      f"batch={batch_size}, mem={memory_size}, seed={seed}, episodes={episode-1}")
+                pbar.close()
+                break
+
+            pbar.update(1)
             reset_out = env.reset()
             obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
             state = normalize_state(obs, low, high)
@@ -139,13 +137,11 @@ def run_experiment(params, device):
             losses, td_errors = [], []
 
             for t in range(1, 201):
-                # Epsilon decay
                 epsilon = eps_end + (eps_start - eps_end) * np.exp(-steps_done / eps_decay)
                 steps_done += 1
 
                 action = select_action(state, policy_net, epsilon, n_actions, device)
                 step_out = env.step(action)
-                # Handle new vs old step API
                 if len(step_out) == 5:
                     nxt_obs, reward, terminated, truncated, _ = step_out
                     done = terminated or truncated
@@ -169,7 +165,6 @@ def run_experiment(params, device):
                     steps_to_goal = t if success else 200
                     break
 
-            # Update target network
             if episode % 10 == 0:
                 target_net.load_state_dict(policy_net.state_dict())
 
@@ -183,30 +178,34 @@ def run_experiment(params, device):
             ])
 
             if len(consec_success) == 10 and all(consec_success):
-                print(f"[Done] γ={gamma}, lr={lr}, hidden={hidden_sizes}, "
+                print(f"[Solved] γ={gamma}, lr={lr}, hidden={hidden_sizes}, "
                       f"batch={batch_size}, mem={memory_size}, seed={seed}, episodes={episode}")
+                pbar.close()
                 break
 
-    env.close()
+        env.close()
 
 # --- Argument parsing & entry point ---
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', choices=['cpu','gpu'], default='cpu',
                         help='Compute device: cpu or gpu')
+    parser.add_argument('--max_episodes', type=int, default=1000,
+                        help='Maximum episodes per experiment (default: 1000)')
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    if args.device == 'gpu' and torch.cuda.is_available():
-        device = torch.device('cuda')
+
+    if args.device == 'gpu':
+        if torch.cuda.is_available():
+            device = torch.device('cuda:0')
+        else:
+            print("CUDA not available, using CPU.")
+            device = torch.device('cpu')
     else:
-        if args.device == 'gpu':
-            print("CUDA not available, falling back to CPU.")
         device = torch.device('cpu')
 
-    # Hyperparameter grid
     gammas = [0.95, 0.99]
     lrs = [1e-3, 5e-4]
     hidden_structures = [[32, 32], [64, 64], [128, 64]]
@@ -214,14 +213,9 @@ def main():
     memory_sizes = [int(1e5), int(2e5)]
     seeds = list(range(5))
 
-    for gamma in gammas:
-        for lr in lrs:
-            for hidden in hidden_structures:
-                for batch in batch_sizes:
-                    for mem in memory_sizes:
-                        for seed in seeds:
-                            params = (gamma, lr, hidden, batch, mem, seed)
-                            run_experiment(params, device)
+    experiments = list(product(gammas, lrs, hidden_structures, batch_sizes, memory_sizes, seeds))
+    for params in tqdm(experiments, desc="All experiments", unit="run"):
+        run_experiment(params, device, args.max_episodes)
 
 if __name__ == '__main__':
     main()
