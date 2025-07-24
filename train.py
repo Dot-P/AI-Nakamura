@@ -4,6 +4,7 @@ import random
 import argparse
 from collections import deque, namedtuple
 from itertools import product
+from model import QNetwork 
 
 import gym
 import numpy as np
@@ -32,21 +33,6 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
-
-# --- Neural network ---
-class QNetwork(nn.Module):
-    def __init__(self, input_dim, hidden_sizes, output_dim):
-        super().__init__()
-        layers = []
-        last = input_dim
-        for h in hidden_sizes:
-            layers.extend([nn.Linear(last, h), nn.ReLU()])
-            last = h
-        layers.append(nn.Linear(last, output_dim))
-        self.net = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.net(x)
 
 # --- Utility functions ---
 def normalize_state(s, low, high):
@@ -183,6 +169,16 @@ def run_experiment(params, device, max_episodes):
                 pbar.close()
                 break
 
+        # --- Save trained model ---
+        model_dir = os.path.join('models', f"g{gamma}_lr{lr}_h{'-'.join(map(str, hidden_sizes))}"
+                                        f"_b{batch_size}_m{memory_size}_s{seed}")
+        os.makedirs(model_dir, exist_ok=True)
+
+        model_path = os.path.join(model_dir, 'policy_net.pt')
+        torch.save(policy_net.state_dict(), model_path)
+
+        print(f"[Model saved] → {model_path}")
+
         env.close()
 
 # --- Argument parsing & entry point ---
@@ -211,7 +207,7 @@ def main():
     hidden_structures = [[32, 32], [64, 64], [128, 64]]
     batch_sizes = [32, 64]
     memory_sizes = [int(1e5), int(2e5)]
-    seeds = list(range(5))
+    seeds = [0]
 
     experiments = list(product(gammas, lrs, hidden_structures, batch_sizes, memory_sizes, seeds))
     for params in tqdm(experiments, desc="All experiments", unit="run"):
