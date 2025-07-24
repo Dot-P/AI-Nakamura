@@ -39,11 +39,7 @@ uv run train.py
 To evaluate a trained agent and save a video of its behavior:
 
 ```bash
-python record_video.py \
-  --model_path models/g0.99_lr0.001_h64-64_b64_m200000_s0/policy_net.pt \
-  --hidden_sizes 64 64 \
-  --video_dir demo_videos/g0.99_lr0.001_h64-64 \
-  --device cpu
+uv run record.py --model_path models/g0.99_lr0.001_h64-64_b64_m200000_s0/policy_net.pt --hidden_sizes 64 64  --video_path ./video/demo.mp4
 ```
 
 * `--model_path`: Path to the trained `.pt` file saved from training.
