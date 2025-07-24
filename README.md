@@ -10,11 +10,11 @@ It includes training with configurable hyperparameters and recording final episo
 ```
 
 ├── train.py              # Training script (called via main.py)
-├── record\_video.py       # Script to load a saved model and record a video
+├── record_video.py       # Script to load a saved model and record a video
 ├── model.py              # QNetwork model definition
 ├── logs/                 # Training logs (CSV)
 ├── models/               # Trained model checkpoints (per experiment)
-├── demo\_videos/          # Output directory for recorded videos
+├── demo_videos/          # Output directory for recorded videos
 └── README.md             # This file
 
 ```
