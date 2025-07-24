@@ -78,10 +78,3 @@ pip install torch gym tqdm numpy
 
 ---
 
-## 📧 Contact
-
-For questions or improvements, feel free to open an issue or pull request.
-
-```
-
----
