@@ -24,7 +24,7 @@ def record_video_manual(
     seed=0,
     device='cpu',
     fps=30,
-    epsilon=0.05,  # 評価時のランダム行動率
+    epsilon=0.,  # 評価時のランダム行動率
 ):
     # 環境セットアップ
     env = gym.make('MountainCar-v0', render_mode='rgb_array')

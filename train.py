@@ -88,7 +88,7 @@ def run_experiment(params, device, max_episodes):
     optimizer = optim.Adam(policy_net.parameters(), lr=lr)
 
     buffer = ReplayBuffer(memory_size)
-    eps_start, eps_end, eps_decay = 1.0, 0.01, 500.0
+    eps_start, eps_end, eps_decay = 1.0, 0.01, 1000.0
     steps_done = 0
 
     os.makedirs('logs', exist_ok=True)
@@ -202,11 +202,11 @@ def main():
     else:
         device = torch.device('cpu')
 
-    gammas = [0.95, 0.99]
-    lrs = [1e-3, 5e-4]
-    hidden_structures = [[32, 32], [64, 64], [128, 64]]
-    batch_sizes = [32, 64]
-    memory_sizes = [int(1e5), int(2e5)]
+    gammas = [0.95]
+    lrs = [1e-3]
+    hidden_structures = [[64, 64]]
+    batch_sizes = [64]
+    memory_sizes = [int(1e5)]
     seeds = [0]
 
     experiments = list(product(gammas, lrs, hidden_structures, batch_sizes, memory_sizes, seeds))
